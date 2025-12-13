@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,12 +58,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "not owner", nil)
 	}
 
-	thumb := thumbnail{
-		data:      data,
-		mediaType: imgType,
-	}
-	videoThumbnails[videoID] = thumb
-	thumbUrl := "http://localhost:8091/api/thumbnails/" + videoID.String()
+	base64Data := base64.StdEncoding.EncodeToString(data)
+	thumbUrl := fmt.Sprintf("data:%s;base64,%s", imgType, base64Data)
 	video := database.Video{
 		ID:                videoDbResp.ID,
 		CreatedAt:         videoDbResp.CreatedAt,
