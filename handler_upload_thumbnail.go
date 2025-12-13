@@ -1,10 +1,12 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -41,12 +43,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Unable to parse from file", err)
 		return
 	}
-	imgType := header.Header.Get("Content-Type")
-	data, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Unable to read the file", err)
+	defer file.Close()
+	contentType := header.Header.Get("Content-Type")
+	splitedTypes := strings.Split(contentType, "/")
+	if len(splitedTypes) == 0 {
+		respondWithError(w, http.StatusBadRequest, "Something went wrong", fmt.Errorf("Content-Type cannot be empty"))
 		return
 	}
+	imgType := splitedTypes[len(splitedTypes)-1]
 
 	videoDbResp, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -57,9 +61,20 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	if videoDbResp.UserID != userID {
 		respondWithError(w, http.StatusUnauthorized, "not owner", nil)
 	}
+	imgPath := filepath.Join(cfg.assetsRoot, videoID.String()) + "." + imgType
+	diskFile, err := os.Create(imgPath)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Something went wrong", err)
+		return
+	}
+	defer diskFile.Close()
+	_, err = io.Copy(diskFile, file)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Something went wrong", err)
+		return
+	}
 
-	base64Data := base64.StdEncoding.EncodeToString(data)
-	thumbUrl := fmt.Sprintf("data:%s;base64,%s", imgType, base64Data)
+	thumbUrl := "http://localhost:8091/" + imgPath
 	video := database.Video{
 		ID:                videoDbResp.ID,
 		CreatedAt:         videoDbResp.CreatedAt,
