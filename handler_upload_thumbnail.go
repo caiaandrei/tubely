@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -69,7 +71,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	if videoDbResp.UserID != userID {
 		respondWithError(w, http.StatusUnauthorized, "not owner", nil)
 	}
-	imgPath := filepath.Join(cfg.assetsRoot, videoID.String()) + "." + imgType
+	key := make([]byte, 32)
+
+	rand.Read(key)
+
+	imgPath := filepath.Join(cfg.assetsRoot, base64.RawURLEncoding.EncodeToString(key)) + "." + imgType
+
 	diskFile, err := os.Create(imgPath)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Something went wrong", err)
@@ -83,6 +90,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	thumbUrl := "http://localhost:8091/" + imgPath
+
 	video := database.Video{
 		ID:                videoDbResp.ID,
 		CreatedAt:         videoDbResp.CreatedAt,
