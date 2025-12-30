@@ -87,7 +87,20 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ration, err := getVideoAspectRation(fileTemp.Name())
+	filePath, err := processVideoForFastStart(fileTemp.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong", err)
+		return
+	}
+	defer os.Remove(filePath)
+	file, err := os.Open(filePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong", err)
+		return
+	}
+	defer file.Close()
+
+	ration, err := getVideoAspectRation(filePath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Something went wrong", err)
 		return
@@ -101,7 +114,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &randFileName,
-		Body:        fileTemp,
+		Body:        file,
 		ContentType: &mediaType,
 	})
 	if err != nil {
@@ -123,6 +136,16 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Something went wrong", err)
 		return
 	}
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	newFilePath := filePath + ".processing"
+	execCom := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", newFilePath)
+	err := execCom.Run()
+	if err != nil {
+		return "", err
+	}
+	return newFilePath, nil
 }
 
 func getVideoAspectRation(path string) (string, error) {
